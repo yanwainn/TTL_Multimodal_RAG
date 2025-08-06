@@ -1,0 +1,20 @@
+From 6b6c16eace245afc6608310289e1554fb4bad4bd Mon Sep 17 00:00:00 2001
+From: WaiYan <waiyan.nn18@gmail.com>
+Date: Wed, 6 Aug 2025 01:53:29 -0500
+Subject: [PATCH] Initial commit
+
+---
+ README.md | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 README.md
+
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..e726bc2
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1 @@
++# RAG Every - Azure OpenAI Implementation
+-- 
+2.38.1
+

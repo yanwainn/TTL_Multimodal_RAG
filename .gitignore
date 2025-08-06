@@ -1,0 +1,16 @@
+# Local environment
+.env
+.DS_Store
+
+# Virtual environment
+.venv/
+venv_rag_anything/
+
+# Data and output
+rag_ui_storage/
+parsed_output_ui/
+output/
+gradio_ui.log
+
+# Cache
+__pycache__/
