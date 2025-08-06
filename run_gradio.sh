@@ -10,6 +10,10 @@ echo "=========================================="
 # Change to the script directory
 cd "$(dirname "$0")"
 
+# Set SSL environment variables
+export SSL_CERT_FILE=./.venv/lib/python3.12/site-packages/certifi/cacert.pem
+export REQUESTS_CA_BUNDLE=./.venv/lib/python3.12/site-packages/certifi/cacert.pem
+
 # Check if virtual environment exists
 if [ ! -d ".venv" ]; then
     echo "❌ Virtual environment not found!"

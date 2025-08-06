@@ -579,7 +579,7 @@ class MineruParser(Parser):
             vlm_url: When the backend is `vlm-sglang-client`, you need to specify the server_url
         """
         cmd = [
-            "mineru",
+            "./.venv/bin/mineru",
             "-p",
             str(input_path),
             "-o",
@@ -590,6 +590,7 @@ class MineruParser(Parser):
             backend,
             "--source",
             source,
+            "--no-verify-ssl",
         ]
 
         if lang:
@@ -622,7 +623,8 @@ class MineruParser(Parser):
             # Hide console window on Windows
             if platform.system() == "Windows":
                 subprocess_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-
+            
+            logging.info(f"Executing MinerU command: {' '.join(cmd)}")
             result = subprocess.run(cmd, **subprocess_kwargs)
             logging.info("MinerU command executed successfully")
             if result.stdout:
@@ -637,6 +639,9 @@ class MineruParser(Parser):
                 "mineru command not found. Please ensure MinerU 2.0 is properly installed:\n"
                 "pip install -U 'mineru[core]' or uv pip install -U 'mineru[core]'"
             )
+        except Exception as e:
+            logging.error(f"An unexpected error occurred while running MinerU: {e}", exc_info=True)
+            raise
 
     @staticmethod
     def _read_output_files(
@@ -655,13 +660,13 @@ class MineruParser(Parser):
         # Look for the generated files
         md_file = output_dir / f"{file_stem}.md"
         json_file = output_dir / f"{file_stem}_content_list.json"
-        images_base_dir = output_dir  # Base directory for images
+        images_base_dir = output_dir.resolve()  # Base directory for images
 
         file_stem_subdir = output_dir / file_stem
         if file_stem_subdir.exists():
             md_file = file_stem_subdir / method / f"{file_stem}.md"
             json_file = file_stem_subdir / method / f"{file_stem}_content_list.json"
-            images_base_dir = file_stem_subdir / method
+            images_base_dir = (file_stem_subdir / method).resolve()
 
         # Read markdown content
         md_content = ""

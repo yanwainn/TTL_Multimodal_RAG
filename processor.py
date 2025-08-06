@@ -1296,64 +1296,85 @@ class ProcessorMixin:
             doc_id: Optional document ID, if not provided will be generated from content
             **kwargs: Additional parameters for parser (e.g., lang, device, start_page, end_page, formula, table, backend, source)
         """
-        # Ensure LightRAG is initialized
-        await self._ensure_lightrag_initialized()
+        try:
+            # Ensure LightRAG is initialized
+            self.logger.info("Step 0: Ensuring LightRAG is initialized...")
+            await self._ensure_lightrag_initialized()
+            self.logger.info("Step 0: LightRAG initialized successfully.")
 
-        # Use config defaults if not provided
-        if output_dir is None:
-            output_dir = self.config.parser_output_dir
-        if parse_method is None:
-            parse_method = self.config.parse_method
-        if display_stats is None:
-            display_stats = self.config.display_content_stats
+            # Use config defaults if not provided
+            if output_dir is None:
+                output_dir = self.config.parser_output_dir
+            if parse_method is None:
+                parse_method = self.config.parse_method
+            if display_stats is None:
+                display_stats = self.config.display_content_stats
 
-        self.logger.info(f"Starting complete document processing: {file_path}")
+            self.logger.info(f"Starting complete document processing: {file_path}")
 
-        # Step 1: Parse document
-        content_list, content_based_doc_id = await self.parse_document(
-            file_path, output_dir, parse_method, display_stats, **kwargs
-        )
-
-        # Use provided doc_id or fall back to content-based doc_id
-        if doc_id is None:
-            doc_id = content_based_doc_id
-
-        # Step 2: Separate text and multimodal content
-        text_content, multimodal_items = separate_content(content_list)
-
-        # Step 2.5: Set content source for context extraction in multimodal processing
-        if hasattr(self, "set_content_source_for_context") and multimodal_items:
-            self.logger.info(
-                "Setting content source for context-aware multimodal processing..."
+            # Step 1: Parse document
+            self.logger.info(f"Step 1: Parsing document: {file_path}...")
+            content_list, content_based_doc_id = await self.parse_document(
+                file_path, output_dir, parse_method, display_stats, **kwargs
             )
-            self.set_content_source_for_context(
-                content_list, self.config.content_format
-            )
+            self.logger.info(f"Step 1: Document parsed successfully. Found {len(content_list)} content blocks.")
 
-        # Step 3: Insert pure text content with all parameters
-        if text_content.strip():
-            file_name = os.path.basename(file_path)
-            await insert_text_content(
-                self.lightrag,
-                text_content,
-                file_paths=file_name,
-                split_by_character=split_by_character,
-                split_by_character_only=split_by_character_only,
-                ids=doc_id,
-            )
+            # Use provided doc_id or fall back to content-based doc_id
+            if doc_id is None:
+                doc_id = content_based_doc_id
+            self.logger.info(f"Using document ID: {doc_id}")
 
-        # Step 4: Process multimodal content (using specialized processors)
-        if multimodal_items:
-            await self._process_multimodal_content(multimodal_items, file_path, doc_id)
-        else:
-            # If no multimodal content, mark multimodal processing as complete
-            # This ensures the document status properly reflects completion of all processing
-            await self._mark_multimodal_processing_complete(doc_id)
-            self.logger.debug(
-                f"No multimodal content found in document {doc_id}, marked multimodal processing as complete"
-            )
+            # Step 2: Separate text and multimodal content
+            self.logger.info("Step 2: Separating text and multimodal content...")
+            text_content, multimodal_items = separate_content(content_list)
+            self.logger.info(f"Step 2: Separation complete. Text length: {len(text_content)}, Multimodal items: {len(multimodal_items)}")
 
-        self.logger.info(f"Document {file_path} processing complete!")
+            # Step 2.5: Set content source for context extraction in multimodal processing
+            if hasattr(self, "set_content_source_for_context") and multimodal_items:
+                self.logger.info(
+                    "Step 2.5: Setting content source for context-aware multimodal processing..."
+                )
+                self.set_content_source_for_context(
+                    content_list, self.config.content_format
+                )
+                self.logger.info("Step 2.5: Content source set successfully.")
+
+            # Step 3: Insert pure text content with all parameters
+            if text_content.strip():
+                self.logger.info("Step 3: Inserting text content into LightRAG...")
+                file_name = os.path.basename(file_path)
+                await insert_text_content(
+                    self.lightrag,
+                    text_content,
+                    file_paths=file_name,
+                    split_by_character=split_by_character,
+                    split_by_character_only=split_by_character_only,
+                    ids=doc_id,
+                )
+                self.logger.info("Step 3: Text content inserted successfully.")
+            else:
+                self.logger.info("Step 3: No text content to insert.")
+
+            # Step 4: Process multimodal content (using specialized processors)
+            if multimodal_items:
+                self.logger.info(f"Step 4: Processing {len(multimodal_items)} multimodal items...")
+                await self._process_multimodal_content(multimodal_items, file_path, doc_id)
+                self.logger.info("Step 4: Multimodal content processed successfully.")
+            else:
+                self.logger.info("Step 4: No multimodal items to process.")
+                # If no multimodal content, mark multimodal processing as complete
+                # This ensures the document status properly reflects completion of all processing
+                await self._mark_multimodal_processing_complete(doc_id)
+                self.logger.debug(
+                    f"No multimodal content found in document {doc_id}, marked multimodal processing as complete"
+                )
+
+            self.logger.info(f"Document {file_path} processing complete!")
+
+        except Exception as e:
+            self.logger.error(f"An error occurred during process_document_complete: {e}", exc_info=True)
+            # Optionally re-raise the exception if you want the caller to handle it
+            raise
 
     async def insert_content_list(
         self,
