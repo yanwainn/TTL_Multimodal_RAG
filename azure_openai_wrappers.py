@@ -13,14 +13,14 @@ import httpx
 # Global cache for responses
 _response_cache = {}
 
-def create_azure_llm_func():
+def create_azure_llm_func(deployment_name: Optional[str] = None):
     """Create Azure OpenAI LLM function compatible with LightRAG"""
     
     # Get Azure configuration
     api_key = os.getenv("LLM_BINDING_API_KEY")
     azure_endpoint = os.getenv("LLM_BINDING_HOST")
     api_version = os.getenv("AZURE_OPENAI_API_VERSION")
-    deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+    deployment = deployment_name or os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
     
     # Create Azure OpenAI client
     client = AsyncAzureOpenAI(
@@ -61,16 +61,79 @@ def create_azure_llm_func():
         
         # Extract relevant kwargs
         temperature = kwargs.get("temperature", 0)
-        max_tokens = kwargs.get("max_tokens", 4000)
         top_p = kwargs.get("top_p", 1.0)
-        
-        # Make API call
+        max_tokens = kwargs.get("max_tokens", 4000)
+
         response = await client.chat.completions.create(
             model=deployment,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p
+        )
+        
+        result = response.choices[0].message.content
+        
+        # Cache response
+        _response_cache[cache_key] = result
+        
+        return result
+    
+    return llm_model_func
+
+def create_gpt5_llm_func(deployment_name: Optional[str] = None):
+    """Create Azure OpenAI LLM function for GPT-5 compatible with LightRAG"""
+    
+    # Get Azure configuration
+    api_key = os.getenv("LLM_BINDING_API_KEY")
+    azure_endpoint = os.getenv("LLM_BINDING_HOST")
+    api_version = "2024-12-01-preview"
+    deployment = deployment_name or "gpt-5"
+    
+    # Create Azure OpenAI client
+    client = AsyncAzureOpenAI(
+        api_key=api_key,
+        azure_endpoint=azure_endpoint,
+        api_version=api_version,
+        http_client=httpx.AsyncClient(verify=False)
+    )
+    
+    async def llm_model_func(
+        prompt: str, 
+        system_prompt: Optional[str] = None, 
+        history_messages: List[Dict[str, str]] = [], 
+        **kwargs
+    ) -> str:
+        """Azure OpenAI GPT-5 completion function compatible with LightRAG"""
+        
+        # Build messages
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        
+        # Add history messages
+        for msg in history_messages:
+            messages.append(msg)
+        
+        # Add current prompt
+        messages.append({"role": "user", "content": prompt})
+        
+        # Create cache key
+        cache_key = hashlib.md5(
+            json.dumps({"model": deployment, "messages": messages}, sort_keys=True).encode()
+        ).hexdigest()
+        
+        # Check cache
+        if cache_key in _response_cache:
+            return _response_cache[cache_key]
+        
+        # Extract relevant kwargs
+        max_tokens = kwargs.get("max_completion_tokens", 16384)
+
+        response = await client.chat.completions.create(
+            model=deployment,
+            messages=messages,
+            max_completion_tokens=max_tokens
         )
         
         result = response.choices[0].message.content
@@ -121,14 +184,14 @@ def create_azure_embedding_func():
         func=embed_func
     )
 
-def create_azure_vision_func():
+def create_azure_vision_func(deployment_name: Optional[str] = None):
     """Create Azure OpenAI vision function compatible with LightRAG"""
     
     # Get Azure configuration
     api_key = os.getenv("LLM_BINDING_API_KEY")
     azure_endpoint = os.getenv("LLM_BINDING_HOST")
     api_version = os.getenv("AZURE_OPENAI_API_VERSION")
-    deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+    deployment = deployment_name or os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
     
     # Create Azure OpenAI client
     client = AsyncAzureOpenAI(
@@ -175,17 +238,26 @@ def create_azure_vision_func():
         
         # Extract relevant kwargs
         temperature = kwargs.get("temperature", 0)
-        max_tokens = kwargs.get("max_tokens", 4000)
         top_p = kwargs.get("top_p", 1.0)
-        
-        # Make API call
-        response = await client.chat.completions.create(
-            model=deployment,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=top_p
-        )
+
+        if deployment == "gpt-5":
+            max_tokens = kwargs.get("max_completion_tokens", 4000)
+            response = await client.chat.completions.create(
+                model=deployment,
+                messages=messages,
+                temperature=temperature,
+                max_completion_tokens=max_tokens,
+                top_p=top_p
+            )
+        else:
+            max_tokens = kwargs.get("max_tokens", 4000)
+            response = await client.chat.completions.create(
+                model=deployment,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p
+            )
         
         return response.choices[0].message.content
     

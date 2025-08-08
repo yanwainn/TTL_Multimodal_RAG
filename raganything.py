@@ -27,6 +27,7 @@ load_dotenv(dotenv_path=".env", override=False)
 
 # Import configuration and modules
 from config import RAGAnythingConfig
+from prompt import PROMPTS
 from query import QueryMixin
 from processor import ProcessorMixin
 from batch import BatchMixin
@@ -64,6 +65,9 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
 
     config: Optional[RAGAnythingConfig] = field(default=None)
     """Configuration object, if None will create with environment variables."""
+
+    prompts: Optional[Dict[str, Any]] = field(default=None)
+    """Optional dictionary of custom prompts to override defaults."""
 
     # LightRAG Configuration
     # ---
@@ -105,7 +109,7 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
 
         # Set up document parser
         self.doc_parser = (
-            DoclingParser() if self.config.parser == "docling" else MineruParser()
+            DoclingParser() if self.config.parser == "docling" else MineruParser(deployment_name=self.config.llm_model_name)
         )
 
         # Create working directory if needed
@@ -177,6 +181,11 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
         # Create context extractor
         self.context_extractor = self._create_context_extractor()
 
+        # Load default prompts and update with custom ones if provided
+        current_prompts = PROMPTS.copy()
+        if self.prompts:
+            current_prompts.update(self.prompts)
+
         # Create different multimodal processors based on configuration
         self.modal_processors = {}
 
@@ -185,6 +194,7 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
                 lightrag=self.lightrag,
                 modal_caption_func=self.vision_model_func or self.llm_model_func,
                 context_extractor=self.context_extractor,
+                prompt_template=current_prompts.get("vision_prompt")
             )
 
         if self.config.enable_table_processing:
@@ -192,6 +202,7 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
                 lightrag=self.lightrag,
                 modal_caption_func=self.llm_model_func,
                 context_extractor=self.context_extractor,
+                prompt_template=current_prompts.get("table_prompt")
             )
 
         if self.config.enable_equation_processing:
@@ -199,6 +210,7 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
                 lightrag=self.lightrag,
                 modal_caption_func=self.llm_model_func,
                 context_extractor=self.context_extractor,
+                prompt_template=current_prompts.get("equation_prompt")
             )
 
         # Always include generic processor as fallback
@@ -206,11 +218,25 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
             lightrag=self.lightrag,
             modal_caption_func=self.llm_model_func,
             context_extractor=self.context_extractor,
+            prompt_template=current_prompts.get("generic_prompt")
         )
 
         self.logger.info("Multimodal processors initialized with context support")
         self.logger.info(f"Available processors: {list(self.modal_processors.keys())}")
         self.logger.info(f"Context configuration: {self._create_context_config()}")
+
+    def update_prompts(self, new_prompts: Dict[str, Any]):
+        """Update prompts for the modal processors."""
+        if self.prompts is None:
+            self.prompts = {}
+        self.prompts.update(new_prompts)
+        
+        # Re-initialize processors to apply the new prompts
+        if self.lightrag:
+            self._initialize_processors()
+            self.logger.info("Prompts updated and processors re-initialized.")
+        else:
+            self.logger.info("Prompts updated. They will be applied when processors are initialized.")
 
     def update_config(self, **kwargs):
         """Update configuration with new values"""

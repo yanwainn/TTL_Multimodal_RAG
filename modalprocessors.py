@@ -365,6 +365,7 @@ class BaseModalProcessor:
         lightrag: LightRAG,
         modal_caption_func,
         context_extractor: ContextExtractor = None,
+        prompt_template: str = None,
     ):
         """Initialize base processor
 
@@ -372,9 +373,11 @@ class BaseModalProcessor:
             lightrag: LightRAG instance
             modal_caption_func: Function for generating descriptions
             context_extractor: Context extractor instance
+            prompt_template: Optional custom prompt template
         """
         self.lightrag = lightrag
         self.modal_caption_func = modal_caption_func
+        self.prompt_template = prompt_template
 
         # Use LightRAG's storage instances
         self.text_chunks_db = lightrag.text_chunks
@@ -787,6 +790,7 @@ class ImageModalProcessor(BaseModalProcessor):
         lightrag: LightRAG,
         modal_caption_func,
         context_extractor: ContextExtractor = None,
+        prompt_template: str = None,
     ):
         """Initialize image processor
 
@@ -794,8 +798,9 @@ class ImageModalProcessor(BaseModalProcessor):
             lightrag: LightRAG instance
             modal_caption_func: Function for generating descriptions (supporting image understanding)
             context_extractor: Context extractor instance
+            prompt_template: Optional custom prompt template
         """
-        super().__init__(lightrag, modal_caption_func, context_extractor)
+        super().__init__(lightrag, modal_caption_func, context_extractor, prompt_template)
 
     def _encode_image_to_base64(self, image_path: str) -> str:
         """Encode image to base64"""
@@ -859,9 +864,10 @@ class ImageModalProcessor(BaseModalProcessor):
 
             # Build detailed visual analysis prompt with context
             if context:
-                vision_prompt = PROMPTS.get(
+                prompt_template = self.prompt_template or PROMPTS.get(
                     "vision_prompt_with_context", PROMPTS["vision_prompt"]
-                ).format(
+                )
+                vision_prompt = prompt_template.format(
                     context=context,
                     entity_name=entity_name
                     if entity_name
@@ -871,7 +877,8 @@ class ImageModalProcessor(BaseModalProcessor):
                     footnotes=footnotes if footnotes else "None",
                 )
             else:
-                vision_prompt = PROMPTS["vision_prompt"].format(
+                prompt_template = self.prompt_template or PROMPTS["vision_prompt"]
+                vision_prompt = prompt_template.format(
                     entity_name=entity_name
                     if entity_name
                     else "unique descriptive name for this image",
@@ -1009,6 +1016,22 @@ class ImageModalProcessor(BaseModalProcessor):
 
 class TableModalProcessor(BaseModalProcessor):
     """Processor specialized for table content"""
+    def __init__(
+        self,
+        lightrag: LightRAG,
+        modal_caption_func,
+        context_extractor: ContextExtractor = None,
+        prompt_template: str = None,
+    ):
+        """Initialize table processor
+
+        Args:
+            lightrag: LightRAG instance
+            modal_caption_func: Function for generating descriptions
+            context_extractor: Context extractor instance
+            prompt_template: Optional custom prompt template
+        """
+        super().__init__(lightrag, modal_caption_func, context_extractor, prompt_template)
 
     async def generate_description_only(
         self,
@@ -1052,9 +1075,10 @@ class TableModalProcessor(BaseModalProcessor):
 
             # Build table analysis prompt with context
             if context:
-                table_prompt = PROMPTS.get(
+                prompt_template = self.prompt_template or PROMPTS.get(
                     "table_prompt_with_context", PROMPTS["table_prompt"]
-                ).format(
+                )
+                table_prompt = prompt_template.format(
                     context=context,
                     entity_name=entity_name
                     if entity_name
@@ -1065,7 +1089,8 @@ class TableModalProcessor(BaseModalProcessor):
                     table_footnote=table_footnote if table_footnote else "None",
                 )
             else:
-                table_prompt = PROMPTS["table_prompt"].format(
+                prompt_template = self.prompt_template or PROMPTS["table_prompt"]
+                table_prompt = prompt_template.format(
                     entity_name=entity_name
                     if entity_name
                     else "descriptive name for this table",
@@ -1203,6 +1228,22 @@ class TableModalProcessor(BaseModalProcessor):
 
 class EquationModalProcessor(BaseModalProcessor):
     """Processor specialized for equation content"""
+    def __init__(
+        self,
+        lightrag: LightRAG,
+        modal_caption_func,
+        context_extractor: ContextExtractor = None,
+        prompt_template: str = None,
+    ):
+        """Initialize equation processor
+
+        Args:
+            lightrag: LightRAG instance
+            modal_caption_func: Function for generating descriptions
+            context_extractor: Context extractor instance
+            prompt_template: Optional custom prompt template
+        """
+        super().__init__(lightrag, modal_caption_func, context_extractor, prompt_template)
 
     async def generate_description_only(
         self,
@@ -1244,9 +1285,10 @@ class EquationModalProcessor(BaseModalProcessor):
 
             # Build equation analysis prompt with context
             if context:
-                equation_prompt = PROMPTS.get(
+                prompt_template = self.prompt_template or PROMPTS.get(
                     "equation_prompt_with_context", PROMPTS["equation_prompt"]
-                ).format(
+                )
+                equation_prompt = prompt_template.format(
                     context=context,
                     equation_text=equation_text,
                     equation_format=equation_format,
@@ -1255,7 +1297,8 @@ class EquationModalProcessor(BaseModalProcessor):
                     else "descriptive name for this equation",
                 )
             else:
-                equation_prompt = PROMPTS["equation_prompt"].format(
+                prompt_template = self.prompt_template or PROMPTS["equation_prompt"]
+                equation_prompt = prompt_template.format(
                     equation_text=equation_text,
                     equation_format=equation_format,
                     entity_name=entity_name
@@ -1387,6 +1430,22 @@ class EquationModalProcessor(BaseModalProcessor):
 
 class GenericModalProcessor(BaseModalProcessor):
     """Generic processor for other types of modal content"""
+    def __init__(
+        self,
+        lightrag: LightRAG,
+        modal_caption_func,
+        context_extractor: ContextExtractor = None,
+        prompt_template: str = None,
+    ):
+        """Initialize generic processor
+
+        Args:
+            lightrag: LightRAG instance
+            modal_caption_func: Function for generating descriptions
+            context_extractor: Context extractor instance
+            prompt_template: Optional custom prompt template
+        """
+        super().__init__(lightrag, modal_caption_func, context_extractor, prompt_template)
 
     async def generate_description_only(
         self,
@@ -1416,9 +1475,10 @@ class GenericModalProcessor(BaseModalProcessor):
 
             # Build generic analysis prompt with context
             if context:
-                generic_prompt = PROMPTS.get(
+                prompt_template = self.prompt_template or PROMPTS.get(
                     "generic_prompt_with_context", PROMPTS["generic_prompt"]
-                ).format(
+                )
+                generic_prompt = prompt_template.format(
                     context=context,
                     content_type=content_type,
                     entity_name=entity_name
@@ -1427,7 +1487,8 @@ class GenericModalProcessor(BaseModalProcessor):
                     content=str(modal_content),
                 )
             else:
-                generic_prompt = PROMPTS["generic_prompt"].format(
+                prompt_template = self.prompt_template or PROMPTS["generic_prompt"]
+                generic_prompt = prompt_template.format(
                     content_type=content_type,
                     entity_name=entity_name
                     if entity_name

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# RAG-Anything Gradio UI Startup Script
+# RAG-Anything Extraction UI Startup Script
 # This script ensures proper environment setup and runs the Gradio UI
 
 echo "=========================================="
-echo "Starting RAG-Anything Gradio UI"
+echo "Starting RAG-Anything Extraction UI"
 echo "=========================================="
 
 # Change to the script directory
@@ -32,7 +32,9 @@ echo ""
 echo "Checking environment variables..."
 if [ -f ".env" ]; then
     echo "✓ .env file found"
-    export $(cat .env | grep -v '^#' | xargs)
+    set -a
+    source .env
+    set +a
 else
     echo "❌ .env file not found! Please create one."
     exit 1
@@ -41,15 +43,15 @@ fi
 # Kill any existing Gradio UI process
 echo ""
 echo "Checking for existing processes..."
-if pgrep -f "gradio_ui.py" > /dev/null; then
-    echo "Found existing Gradio UI process. Killing it..."
-    pkill -f "gradio_ui.py"
+if pgrep -f "run_extraction.py" > /dev/null; then
+    echo "Found existing Extraction UI process. Killing it..."
+    pkill -f "run_extraction.py"
     sleep 2
 fi
 
 # Start the Gradio UI
 echo ""
-echo "Starting Gradio UI..."
+echo "Starting Extraction UI..."
 echo "=========================================="
 echo "Access the UI at: http://localhost:7860"
 echo "Press Ctrl+C to stop"
@@ -57,4 +59,4 @@ echo "=========================================="
 echo ""
 
 # Run with real-time output
-python gradio_ui.py
+python3 run_extraction.py

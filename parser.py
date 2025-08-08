@@ -537,17 +537,18 @@ class MineruParser(Parser):
     Note: Office documents are no longer directly supported. Please convert them to PDF first.
     """
 
-    __slots__ = ()
+    __slots__ = ('deployment_name',)
 
     # Class-level logger
     logger = logging.getLogger(__name__)
 
-    def __init__(self) -> None:
+    def __init__(self, deployment_name: Optional[str] = None) -> None:
         """Initialize MineruParser"""
         super().__init__()
+        self.deployment_name = deployment_name
 
-    @staticmethod
     def _run_mineru_command(
+        self,
         input_path: Union[str, Path],
         output_dir: Union[str, Path],
         method: str = "auto",
@@ -607,10 +608,15 @@ class MineruParser(Parser):
             cmd.extend(["-d", device])
         if vlm_url:
             cmd.extend(["-u", vlm_url])
-
+        
         try:
             # Prepare subprocess parameters to hide console window on Windows
             import platform
+            import os
+
+            env = os.environ.copy()
+            if self.deployment_name:
+                env["AZURE_OPENAI_DEPLOYMENT"] = self.deployment_name
 
             subprocess_kwargs = {
                 "capture_output": True,
@@ -618,6 +624,7 @@ class MineruParser(Parser):
                 "check": True,
                 "encoding": "utf-8",
                 "errors": "ignore",
+                "env": env,
             }
 
             # Hide console window on Windows

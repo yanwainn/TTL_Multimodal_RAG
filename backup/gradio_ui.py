@@ -20,6 +20,7 @@ sys.path.append(str(Path(__file__).parent))
 from raganything import RAGAnything
 from config import RAGAnythingConfig
 from azure_openai_wrappers import create_azure_llm_func, create_azure_embedding_func, create_azure_vision_func
+from prompt import PROMPTS
 
 # Load environment variables
 load_dotenv(dotenv_path=".env", override=False)
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 # Global RAG instance
 rag_instance = None
 
-def initialize_rag():
+def initialize_rag(custom_prompts=None):
     """Initialize RAG-Anything with Azure OpenAI"""
     global rag_instance
     
@@ -57,14 +58,18 @@ def initialize_rag():
             config=config,
             llm_model_func=create_azure_llm_func(),
             embedding_func=create_azure_embedding_func(),
-            vision_model_func=create_azure_vision_func()
+            vision_model_func=create_azure_vision_func(),
+            prompts=custom_prompts
         )
     
+    elif custom_prompts:
+        rag_instance.update_prompts(custom_prompts)
+        
     return rag_instance
 
-async def process_document_async(file_path):
+async def process_document_async(file_path, custom_prompts):
     """Process a document asynchronously"""
-    rag = initialize_rag()
+    rag = initialize_rag(custom_prompts=custom_prompts)
     await rag.process_document_complete(
         file_path=file_path,
         output_dir="./parsed_output_ui"
@@ -89,27 +94,38 @@ async def check_document_status(file_path):
     
     return is_processed
 
-async def process_document(file):
-    """Process uploaded document"""
-    if file is None:
-        return "Please upload a document first."
-    
-    file_path = file.name
-    file_name = os.path.basename(file_path)
-    
-    try:
-        # Check if the document is already processed
-        is_processed = await check_document_status(file_path)
+async def process_documents(files, vision_prompt, table_prompt, equation_prompt, generic_prompt):
+    """Process uploaded documents"""
+    if not files:
+        return "Please upload one or more documents first."
         
-        if is_processed:
-            return f"✅ Document '{file_name}' has already been processed and is ready for querying."
+    custom_prompts = {
+        "vision_prompt": vision_prompt,
+        "table_prompt": table_prompt,
+        "equation_prompt": equation_prompt,
+        "generic_prompt": generic_prompt,
+    }
+    
+    processed_files = []
+    for file in files:
+        file_path = file.name
+        file_name = os.path.basename(file_path)
         
-        # If not processed, run the async processing
-        await process_document_async(file_path)
-        return f"✅ Successfully processed: {file_name}"
-    except Exception as e:
-        logger.error(f"Error processing document: {e}")
-        return f"❌ Error processing document: {str(e)}"
+        try:
+            # Check if the document is already processed
+            is_processed = await check_document_status(file_path)
+            
+            if is_processed:
+                processed_files.append(f"✅ Document '{file_name}' has already been processed and is ready for querying.")
+            else:
+                # If not processed, run the async processing
+                await process_document_async(file_path, custom_prompts)
+                processed_files.append(f"✅ Successfully processed: {file_name}")
+        except Exception as e:
+            logger.error(f"Error processing document: {e}")
+            processed_files.append(f"❌ Error processing document: {str(e)}")
+            
+    return "\n".join(processed_files)
 
 async def query_async(question, timeout_seconds=60):
     """Query the processed documents asynchronously with timeout"""
@@ -117,7 +133,7 @@ async def query_async(question, timeout_seconds=60):
     start_time = time.time()
     
     logger.info(f"Starting query: {question[:100]}...")
-    rag = initialize_rag()
+    rag = initialize_rag() # Prompts should be set from the processing step
     
     try:
         # Ensure LightRAG is initialized before querying
@@ -192,12 +208,20 @@ async def query_documents(question, timeout_seconds=60):
         logger.error(traceback.format_exc())
         return f"❌ Error: {str(e)}\n\nPlease check the logs for more details."
 
-async def process_existing_pdf():
+async def process_existing_pdf(vision_prompt, table_prompt, equation_prompt, generic_prompt):
     """Process the existing product.pdf file"""
     pdf_path = "output/product.pdf"
+    
+    custom_prompts = {
+        "vision_prompt": vision_prompt,
+        "table_prompt": table_prompt,
+        "equation_prompt": equation_prompt,
+        "generic_prompt": generic_prompt,
+    }
+    
     if os.path.exists(pdf_path):
         try:
-            await process_document_async(pdf_path)
+            await process_document_async(pdf_path, custom_prompts)
             return f"✅ Successfully processed: {pdf_path}"
         except Exception as e:
             logger.error(f"Error processing PDF: {e}")
@@ -217,7 +241,8 @@ with gr.Blocks(title="RAG-Anything UI") as demo:
         with gr.Row():
             with gr.Column():
                 file_input = gr.File(
-                    label="Upload Document",
+                    label="Upload Documents",
+                    file_count="multiple",
                     file_types=[".pdf", ".txt", ".md", ".docx", ".png", ".jpg", ".jpeg"]
                 )
                 process_btn = gr.Button("Process Document", variant="primary")
@@ -233,17 +258,6 @@ with gr.Blocks(title="RAG-Anything UI") as demo:
                     interactive=False
                 )
         
-        process_btn.click(
-            fn=process_document,
-            inputs=[file_input],
-            outputs=[process_output]
-        )
-        
-        existing_pdf_btn.click(
-            fn=process_existing_pdf,
-            inputs=[],
-            outputs=[process_output]
-        )
     
     with gr.Tab("Query Documents"):
         with gr.Row():
@@ -306,6 +320,66 @@ with gr.Blocks(title="RAG-Anything UI") as demo:
                 inputs=[question_input, timeout_slider],
                 outputs=[answer_output]
             )
+
+    with gr.Tab("Prompt Settings"):
+        gr.Markdown("## ⚙️ Customize Analysis Prompts")
+        gr.Markdown("Modify the prompts used for analyzing different types of content. Changes will be applied when you next process a document.")
+        
+        with gr.Accordion("Image Analysis Prompt", open=False):
+            gr.Textbox(
+                label="System Prompt (Read-Only)",
+                value=PROMPTS["IMAGE_ANALYSIS_SYSTEM"],
+                lines=2,
+                interactive=False
+            )
+            vision_prompt_input = gr.Textbox(
+                label="Vision Prompt",
+                value=PROMPTS["vision_prompt"],
+                lines=15,
+                interactive=True
+            )
+        
+        with gr.Accordion("Table Analysis Prompt", open=False):
+            gr.Textbox(
+                label="System Prompt (Read-Only)",
+                value=PROMPTS["TABLE_ANALYSIS_SYSTEM"],
+                lines=2,
+                interactive=False
+            )
+            table_prompt_input = gr.Textbox(
+                label="Table Prompt",
+                value=PROMPTS["table_prompt"],
+                lines=15,
+                interactive=True
+            )
+            
+        with gr.Accordion("Equation Analysis Prompt", open=False):
+            gr.Textbox(
+                label="System Prompt (Read-Only)",
+                value=PROMPTS["EQUATION_ANALYSIS_SYSTEM"],
+                lines=2,
+                interactive=False
+            )
+            equation_prompt_input = gr.Textbox(
+                label="Equation Prompt",
+                value=PROMPTS["equation_prompt"],
+                lines=15,
+                interactive=True
+            )
+            
+        with gr.Accordion("Generic Content Prompt", open=False):
+            gr.Textbox(
+                label="System Prompt (Read-Only)",
+                value=PROMPTS["GENERIC_ANALYSIS_SYSTEM"],
+                lines=2,
+                interactive=False
+            )
+            generic_prompt_input = gr.Textbox(
+                label="Generic Prompt",
+                value=PROMPTS["generic_prompt"],
+                lines=15,
+                interactive=True
+            )
     
     with gr.Tab("Info"):
         gr.Markdown("""
@@ -329,6 +403,18 @@ with gr.Blocks(title="RAG-Anything UI") as demo:
         - Parser: MinerU 2.0
         - Storage: Local (./rag_ui_storage)
         """)
+
+    prompt_inputs = [vision_prompt_input, table_prompt_input, equation_prompt_input, generic_prompt_input]
+    process_btn.click(
+        fn=process_documents,
+        inputs=[file_input] + prompt_inputs,
+        outputs=[process_output]
+    )
+    existing_pdf_btn.click(
+        fn=process_existing_pdf,
+        inputs=prompt_inputs,
+        outputs=[process_output]
+    )
 
 if __name__ == "__main__":
     # Check environment variables
